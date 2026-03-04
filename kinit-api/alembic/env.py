@@ -39,6 +39,7 @@ from apps.vadmin.system.models import *
 from apps.vadmin.record.models import *
 from apps.vadmin.help.models import *
 from apps.vadmin.resource.models import *
+from apps.flight.models import *
 
 # 修改配置中的参数
 target_metadata = Base.metadata
