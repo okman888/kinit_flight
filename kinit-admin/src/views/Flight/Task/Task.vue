@@ -170,8 +170,6 @@ const formData = reactive({
   channel_account: '',
   channel_password: '',
   proxy: '',
-  http_proxy: '',
-  https_proxy: ''
 })
 
 const createEmptyItem = (): TaskItem => ({
@@ -203,8 +201,6 @@ const openAddDialog = () => {
   formData.channel_account = ''
   formData.channel_password = ''
   formData.proxy = ''
-  formData.http_proxy = ''
-  formData.https_proxy = ''
   taskItems.value = [createEmptyItem()]
   dialogVisible.value = true
 }
@@ -288,18 +284,13 @@ const saveTask = async () => {
   saveLoading.value = true
   try {
     const proxy = formData.proxy.trim()
-    const httpProxyInput = formData.http_proxy.trim()
-    const httpsProxyInput = formData.https_proxy.trim()
-    const defaultProxy = proxy || httpProxyInput || httpsProxyInput
-    const httpProxy = httpProxyInput || defaultProxy
-    const httpsProxy = httpsProxyInput || defaultProxy
     await addFlightTaskApi({
       task_name: formData.task_name,
       channel: formData.channel,
       channel_account: formData.channel_account || undefined,
       channel_password: formData.channel_password || undefined,
-      http_proxy: httpProxy || undefined,
-      https_proxy: httpsProxy || undefined,
+      http_proxy: proxy || undefined,
+      https_proxy: proxy || undefined,
       items: taskItems.value
     })
     ElMessage.success('任务创建成功，已提交后台异步执行')
@@ -367,14 +358,6 @@ const refreshConfirm = () => {
       <div>
         <div class="mb-8px">代理IP（可选，HTTP/HTTPS默认同地址）</div>
         <ElInput v-model="formData.proxy" placeholder="如 http://127.0.0.1:7890" />
-      </div>
-      <div>
-        <div class="mb-8px">HTTP代理（可选）</div>
-        <ElInput v-model="formData.http_proxy" placeholder="留空时默认使用上方代理IP" />
-      </div>
-      <div>
-        <div class="mb-8px">HTTPS代理（可选）</div>
-        <ElInput v-model="formData.https_proxy" placeholder="留空时默认使用上方代理IP" />
       </div>
     </div>
 
