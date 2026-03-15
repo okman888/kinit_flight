@@ -1,6 +1,25 @@
 // 需要先加载 crypto-js
 // npm install crypto-js
-const CryptoJS = require("crypto-js");
+const path = require('path');
+// PyExecJS 运行时 __dirname 可能为当前目录，尝试多种路径解析方式
+const possiblePaths = [
+    path.join(__dirname, 'node_modules', 'crypto-js'),
+    '/Users/apple/Desktop/workspace/kinit_flight/kinit-trip/node_modules/crypto-js',
+    'node_modules/crypto-js',
+    'crypto-js'
+];
+let CryptoJS = null;
+for (const p of possiblePaths) {
+    try {
+        CryptoJS = require(p);
+        break;
+    } catch (e) {
+        // 继续尝试下一个路径
+    }
+}
+if (!CryptoJS) {
+    throw new Error('Cannot find crypto-js module. Tried: ' + possiblePaths.join(', '));
+}
 window = globalThis;
 
 var _0x3500 = ["pad", "httperror", "length", "0123456789abcdef", "//ic.ctrip.uat.qa.nt.ctripcorp.com/", "jsonp", "prototype", "mediaStreamTrack", "isPreProduction", "padding", "apply", "removeChild", "iterationCount", "stateChange", "corpid", "_cipher", "DUID", "ver", "getElementsByTagName", "sFP", "_minBufferSize", "encrypt", "PBKDF2", "cfg", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=", "browserLanguage", "inter_base", "jigsaw", "ctrip", "=([^&]*)(&|$)", "//ic.ctrip.com/", "risk_info", "UserID", "HmacSHA1", "_oKey", "sigBytes", "false", "Base", "charAt", "checkParas", "extend_param", "ontimeout", "__quote", "undefined", "createEncryptor", "_bfs", "SHA1", "rid", "parentNode", "setAttribute", "Utf8", "cticket", "setRequestHeader", "lib", "push", "addEventListener", "sfp", "compute", "readyState", "ivSize", "_nDataBytes", "string", "navigator", "clear", "(^| )", "timer", "_process", "securefp", "clone", "test", "pro", "msgTips", "//gateway.m.uat.qa.nt.ctripcorp.com/restapi/infosec/", "stack", "_DEC_XFORM_MODE", "hasOwnProperty", "serviceEnv", "icon", "response", "extend", "svid", "\x3c!--[if IE ", "name", "getTimezoneOffset", "hostname", "timeZone", "280px", "VID", "reset", "_getFP", "substr", "$super", "localStorage", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", "width", "infoBox", "size", "floor", "(^|&)", "hasIndexedDB", "Linux", "direct", "EvpKDF", "online", "MD5", "risk_inspect", "object", "&business_site=", "httpfail", "parse", "ctripqa.com", "rms", "english", "min", "match", "scrH", "concat", "param", "stringify", "data_js", "Latin1", "ebooking.trip.com", "src", "__getKeys", "guid", "finalize", "JSON", "kdf", "//m.ctrip.com/restapi/infosec/", "AudioContext", "token", "_mode", "Hasher", "_append", "mode", "__CryptoJS", "replace", "_iKey", "substring", "ciphertext", "CipherParams", "fat", "code", "unknown", "&dimensions=", "iterations", "POST", "openDatabase", "jigsawVerificationMain_", "words", "flaState", "//ebooking.trip.com/", "error", ":http error", "CtripUserInfo", "call", "hasher", "_devTrace", "_parse", "Pkcs7", "imei", "keySize", "infosec_openid", "enc", "touchSupport", "tip", "ctrip.com", "status", "//ic.uat.ctripqa.com/", "onerror", "=([^;]*)(;|$)", "indexOf", "__bfi", "getTime", "?callback=", "//m.trip.com/restapi/infosec/", "tid", "slice", "random", "cookieEnabled", "Hex", "lastIndex", "decryptBlock", "withCredentials", "key", "200", "splice", "mixIn", "captcha", "WordArray", "unpad", "ebooking", "ShockwaveFlash.ShockwaveFlash", "//m-ebooking.trip.com/", "serviceerror", "_keySchedule", "_getRmsToken", "clamp", "BlockCipherMode", "post", "_hash", "refresh", "resultHandler", "hasDataBase", "238397", "_prevBlock", "ceil", "meta", "userAgent", "StreamCipher", "_invKeySchedule", "colorDepth", "vid", "cupClass", "_nRounds", "idfa", "screen", "__rmsbfi", "format", "GUID", "Base64", "createElement", "__changeStyle", "_hasher", "HMAC", "_map", "__sJSON", "_iv", "_createHelper", "img_info", "toString", "_xformMode", "iOS", "identify", "$1\n", "keyboardEventExist", "process_type", "language", "process_value", "_getStatus", "height", "data", "cookie", "Decryptor", "_key", "AES", "Encryptor", "_doFinalize", "protocol", "hasLocalStorage", "processBlock", "send", "1.0.3", "sVID", "create", "timeout", "blockSize", "_bfi", "loaded", "scrW", "algo", "join", "constructor", "salt", "OpenSSL", "0000", "split", "data/js/v4", "createDecryptor", "triplinkintl.com", "onreadystatechange", "businessSite", "Cipher", "_createHmacHelper", "_ENC_XFORM_MODE", "hidden", "//ebooking.ctrip.com/", "supportXHR", "_data", "decrypt", "update", "PasswordBasedCipher", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", "appId", "uid", "ontouchstart", "getItem", "content", "captcha/v4/", "overtime", "jigsawCaptchaMainModule_", "m-ebooking.trip.com", "&version=", "head", "uat", "toUpperCase", "location", "referrer", "platform", "keywords", "site", "http error", "//ic.trip.com/", "now", "doNotTrack", "http:", "encryptBlock", "https:", "sessionStorage", "&extend_param=", "_doReset", "_doProcessBlock", "webkitAudioContext", "toLowerCase", "_doCryptBlock", "risk_level", "href"];
@@ -261,7 +280,7 @@ const aes = new CustomAES();
 
 // const plaintext = JSON.stringify(obj);
 function encBody(plaintext) {
-    plaintext = window["__sJSON"].stringify(obj)
+    plaintext = window["__sJSON"].stringify(plaintext)
     return aes.encrypt(ivHex, plaintext);
 }
 

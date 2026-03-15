@@ -15,7 +15,8 @@ import {
   ElDatePicker,
   ElTable,
   ElTableColumn,
-  ElUpload
+  ElUpload,
+  ElDialog
 } from 'element-plus'
 import { BaseButton } from '@/components/Button'
 import { useTable } from '@/hooks/web/useTable'
@@ -24,7 +25,8 @@ import {
   addFlightTaskApi,
   runFlightTaskApi,
   exportFlightTaskApi,
-  delFlightTaskApi
+  delFlightTaskApi,
+  getFlightTaskApi
 } from '@/api/flight'
 import * as XLSX from 'xlsx'
 
@@ -58,7 +60,22 @@ const { getList, delList } = tableMethods
 
 const tableColumns = reactive<TableColumn[]>([
   { field: 'task_id', label: '任务ID', show: true, width: '180px' },
-  { field: 'task_name', label: '任务名称', show: true, minWidth: '180px' },
+  {
+    field: 'task_name',
+    label: '任务名称',
+    show: true,
+    minWidth: '180px',
+    slots: {
+      default: (data: any) => {
+        const row = data.row
+        return (
+          <BaseButton type="primary" link onClick={() => openDetailDialog(row)}>
+            {row.task_name}
+          </BaseButton>
+        )
+      }
+    }
+  },
   { field: 'channel', label: '渠道', show: true, width: '120px' },
   { field: 'status', label: '状态', show: true, width: '120px' },
   { field: 'success_requests', label: '成功请求', show: true, width: '100px' },
@@ -153,6 +170,37 @@ const exportTask = async (row: any) => {
   }
 }
 
+// 打开任务详情对话框
+const openDetailDialog = async (row: any) => {
+  const taskId = row.task_id
+  if (!taskId) {
+    ElMessage.warning('任务ID不存在')
+    return
+  }
+  detailLoading.value = true
+  try {
+    const res = await getFlightTaskApi(taskId)
+    if (res?.code === 200) {
+      taskDetail.value = res.data
+      // 解析 task_payload 为 JSON 对象
+      if (taskDetail.value?.task_payload) {
+        try {
+          taskDetail.value.task_payload = JSON.parse(taskDetail.value.task_payload)
+        } catch (e) {
+          console.error('解析 task_payload 失败:', e)
+        }
+      }
+      detailDialogVisible.value = true
+    } else {
+      ElMessage.error('获取任务详情失败')
+    }
+  } catch (error) {
+    ElMessage.error('获取任务详情失败')
+  } finally {
+    detailLoading.value = false
+  }
+}
+
 interface TaskItem {
   departure_city: string
   departure_city_name: string
@@ -170,7 +218,14 @@ const formData = reactive({
   channel_account: '',
   channel_password: '',
   proxy: '',
+  proxy_account: '',
+  proxy_password: ''
 })
+
+// 任务详情对话框
+const detailDialogVisible = ref(false)
+const detailLoading = ref(false)
+const taskDetail = ref<any>(null)
 
 const createEmptyItem = (): TaskItem => ({
   departure_city: '',
@@ -201,6 +256,8 @@ const openAddDialog = () => {
   formData.channel_account = ''
   formData.channel_password = ''
   formData.proxy = ''
+  formData.proxy_account = ''
+  formData.proxy_password = ''
   taskItems.value = [createEmptyItem()]
   dialogVisible.value = true
 }
@@ -220,41 +277,47 @@ const HEADER_MAP: Record<string, keyof TaskItem> = {
   end_date: 'end_date'
 }
 
-const handleExcelUpload = (options: any) => {
-  const file: File = options.file
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    try {
-      const data = new Uint8Array(e.target?.result as ArrayBuffer)
-      const workbook = XLSX.read(data, { type: 'array' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const jsonRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' })
-      if (!jsonRows.length) {
-        ElMessage.warning('Excel 文件中无有效数据')
-        return
-      }
-      const parsed: TaskItem[] = jsonRows.map((row) => {
-        const item = createEmptyItem()
-        for (const [header, value] of Object.entries(row)) {
-          const key = HEADER_MAP[header.trim()]
-          if (key) {
-            item[key] = String(value).trim()
-          }
+const handleExcelUpload = (options: any): Promise<unknown> => {
+  return new Promise((resolve) => {
+    const file: File = options.file
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer)
+        const workbook = XLSX.read(data, { type: 'array' })
+        const sheet = workbook.Sheets[workbook.SheetNames[0]]
+        const jsonRows: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+        if (!jsonRows.length) {
+          ElMessage.warning('Excel 文件中无有效数据')
+          resolve(null)
+          return
         }
-        return item
-      })
-      const valid = parsed.filter((r) => r.departure_city && r.arrival_city)
-      if (!valid.length) {
-        ElMessage.warning('未识别到有效数据行，请检查列名是否匹配')
-        return
+        const parsed: TaskItem[] = jsonRows.map((row) => {
+          const item = createEmptyItem()
+          for (const [header, value] of Object.entries(row)) {
+            const key = HEADER_MAP[header.trim()]
+            if (key) {
+              item[key] = String(value).trim()
+            }
+          }
+          return item
+        })
+        const valid = parsed.filter((r) => r.departure_city && r.arrival_city)
+        if (!valid.length) {
+          ElMessage.warning('未识别到有效数据行，请检查列名是否匹配')
+          resolve(null)
+          return
+        }
+        taskItems.value = valid
+        ElMessage.success(`成功导入 ${valid.length} 条采集项`)
+        resolve(null)
+      } catch (error) {
+        ElMessage.error('Excel 文件解析失败，请检查文件格式')
+        resolve(null)
       }
-      taskItems.value = valid
-      ElMessage.success(`成功导入 ${valid.length} 条采集项`)
-    } catch {
-      ElMessage.error('Excel 文件解析失败，请检查文件格式')
     }
-  }
-  reader.readAsArrayBuffer(file)
+    reader.readAsArrayBuffer(file)
+  })
 }
 
 const downloadTemplate = () => {
@@ -291,6 +354,8 @@ const saveTask = async () => {
       channel_password: formData.channel_password || undefined,
       http_proxy: proxy || undefined,
       https_proxy: proxy || undefined,
+      proxy_account: formData.proxy_account || undefined,
+      proxy_password: formData.proxy_password || undefined,
       items: taskItems.value
     })
     ElMessage.success('任务创建成功，已提交后台异步执行')
@@ -358,6 +423,14 @@ const refreshConfirm = () => {
       <div>
         <div class="mb-8px">代理IP（可选，HTTP/HTTPS默认同地址）</div>
         <ElInput v-model="formData.proxy" placeholder="如 http://127.0.0.1:7890" />
+      </div>
+      <div>
+        <div class="mb-8px">代理账号（可选）</div>
+        <ElInput v-model="formData.proxy_account" />
+      </div>
+      <div>
+        <div class="mb-8px">代理密码（可选）</div>
+        <ElInput v-model="formData.proxy_password" type="password" show-password />
       </div>
     </div>
 
@@ -439,4 +512,54 @@ const refreshConfirm = () => {
       <BaseButton @click="dialogVisible = false">关闭</BaseButton>
     </template>
   </Dialog>
+
+  <!-- 任务详情对话框 -->
+  <ElDialog
+    v-model="detailDialogVisible"
+    title="任务详情"
+    :width="1060"
+    :close-on-click-modal="false"
+  >
+    <div v-if="detailLoading" class="text-center py-20"> 加载中... </div>
+    <div v-else-if="taskDetail" class="bg-white p-8px rounded-md">
+      <div class="grid grid-cols-3 gap-8px mb-12px">
+        <div>
+          <div class="text-gray-500 mb-4px">任务ID</div>
+          <div class="font-medium">{{ taskDetail.task_id }}</div>
+        </div>
+        <div>
+          <div class="text-gray-500 mb-4px">任务名称</div>
+          <div class="font-medium">{{ taskDetail.task_name }}</div>
+        </div>
+        <div>
+          <div class="text-gray-500 mb-4px">渠道</div>
+          <div class="font-medium">{{ taskDetail.channel }}</div>
+        </div>
+        <div>
+          <div class="text-gray-500 mb-4px">渠道账号</div>
+          <div class="font-medium">{{ taskDetail.channel_account || '无' }}</div>
+        </div>
+        <div>
+          <div class="text-gray-500 mb-4px">代理IP</div>
+          <div class="font-medium">{{ taskDetail.http_proxy || '无' }}</div>
+        </div>
+        <div>
+          <div class="text-gray-500 mb-4px">状态</div>
+          <div class="font-medium">{{ taskDetail.status }}</div>
+        </div>
+      </div>
+      <div class="mb-8px">
+        <h3 class="font-bold mb-4px">采集项</h3>
+        <ElTable :data="taskDetail.task_payload?.items || []" border style="width: 100%">
+          <ElTableColumn label="出发城市代码" prop="departure_city" min-width="120" />
+          <ElTableColumn label="出发城市名称" prop="departure_city_name" min-width="120" />
+          <ElTableColumn label="到达城市代码" prop="arrival_city" min-width="120" />
+          <ElTableColumn label="到达城市名称" prop="arrival_city_name" min-width="120" />
+          <ElTableColumn label="开始日期" prop="start_date" min-width="150" />
+          <ElTableColumn label="结束日期" prop="end_date" min-width="150" />
+        </ElTable>
+      </div>
+    </div>
+    <div v-else class="text-center py-20"> 未找到任务详情 </div>
+  </ElDialog>
 </template>

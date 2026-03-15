@@ -32,8 +32,15 @@ current_path = os.path.dirname(os.path.abspath(__file__))
 cc = opencc.OpenCC('t2s')  # 繁体转简体
 
 def crypto_js():
+    node_path = os.path.join(current_path, 'node_modules')
+    os.environ['NODE_PATH'] = node_path
+    # 设置 PyExecJS 使用 Node.js 并传递 NODE_PATH
+    import subprocess
+    node_executable = os.environ.get('NODE_EXECUTABLE', 'node')
     with open(os.path.join(current_path, 'crypto_js.js'), 'r', encoding="utf-8")as f:
-        ctx = execjs.compile(f.read())
+        code = f.read()
+    # 直接使用 subprocess 调用 Node.js 并设置环境变量
+    ctx = execjs.compile(code)
     return ctx
 
 def random_ee(e=32, t=0):
@@ -54,8 +61,8 @@ def random_ee(e=32, t=0):
 
 class CrawlerTrip:
     def __init__(self, account=None, password=None, http_proxy=None, https_proxy=None):
-        self.session = requests.Session()
-        #self.session = requests_go.Session()
+        # Use requests_go.Session() for TLS configuration
+        self.session = requests_go.Session()
         tls_choice = TLS_CHROME_130
         self.random_tls = tls_choice
         self.session.tls_config = self.random_tls
@@ -580,7 +587,9 @@ class CrawlerTrip:
             if t is None:
                 return {"code": 400, "message": "验证码未通过校验"}
             self.updateToWhite(t['rid'], t['token'], "flightListSearch")
-            return {"code": 400, "msg": f"{param['dept']} - {param['arr']} 触发验证码"}
+            # 验证码通过后，重新请求获取数据
+            logger.info(f"验证码已通过，重新请求 {param['dept']} - {param['arr']} 航班数据")
+            res = self.session.post(url, headers=self.headers, data=data, proxies=self.proxies, timeout=self.timeout)
         flight_data = {}
         if param['iata'] == "ca":
             flight_data = res.json()
@@ -599,7 +608,20 @@ class CrawlerTrip:
             if t is None:
                 return {"code": 400, "message": "验证码未通过校验"}
             self.updateToWhite(t['rid'], t['token'], "flightListSearch")
-            return {"code": 401, "msg": f"{param['dept']} - {param['arr']} 航班数据异常或可能触发验证码"}
+            # 验证码通过后，重新请求获取数据
+            logger.info(f"验证码已通过，重新请求 {param['dept']} - {param['arr']} 航班数据")
+            res = self.session.post(url, headers=self.headers, data=data, proxies=self.proxies, timeout=self.timeout)
+            if res.status_code != 200:
+                logger.error(f"{param['dept']} - {param['arr']} 重新请求失败: {res.status_code}")
+                return {"code": 400, "msg": f"{param['dept']} - {param['arr']} 重新请求失败: {res.status_code}"}
+            # 重新解析数据
+            if param['iata'] == "ca":
+                flight_data = res.json()
+            elif param['iata'] == "int":
+                match_flight = re.findall('data:(.*?)\n', res.text)
+                if len(match_flight) != 2:
+                    return {"code": 400, "msg": f"{param['dept']} - {param['arr']} 验证码通过后仍无法获取数据"}
+                flight_data = json.loads(match_flight[1])
         logger.info(f"{param['dept']} - {param['arr']} 航班数据获取成功")
         return {"code": 200, "msg": "success", "data": flight_data}
 
@@ -615,12 +637,13 @@ class CrawlerTrip:
             journey = itinerary["journeyList"][0]
             segments = journey.get("transSectionList", [])
             policies = itinerary.get("policies", [])[0]
+
+            segs = []
             for segment in segments:
                 depart_point = segment.get("departPoint", {})
                 arrive_point = segment.get("arrivePoint", {})
                 flight_info = segment.get("flightInfo", {})
                 craft_info = flight_info.get("craftInfo", {})
-                segs = []
                 segs.append({
                     "aircraftCode": craft_info.get("shortName", ""),
                     "dept": depart_point.get("airportCode", ""),
@@ -629,55 +652,57 @@ class CrawlerTrip:
                     "arr": arrive_point.get("airportCode", ""),
                     "arrtime": segment.get("arriveDateTime", ""),
                     "arrtrmn": arrive_point.get("terminal", ""),
-                    # "chdbag": "1,20,KG",  # 默认儿童行李信息
-                    # "chdfarebasis": "",  # 儿童票价基础代码
-                    # "bag": "1,20,KG",  # 默认行李信息，可根据实际数据调整
                     "cabinclass": policies['gradeInfoList'][0]['subClass'],
                     "cabinName": policies['gradeInfoList'][0]['gradeMultilingual'],
                     "flightno": flight_info.get("flightNo", ""),
                     "flighttime": segment.get("duration", 0),
-                    "fareFamily": "",  # 票价家族
-                    "farebasis": "",  # 票价基础代码
+                    "fareFamily": "",
+                    "farebasis": "",
                     "group": 0,
-                    # "seat": "R",  # 座位等级
                     "meal": None,
                     "oprcarrier": flight_info.get("airlineCode", ""),
                     "oprflightno": flight_info.get("flightNo", ""),
                 })
-                price = policies.get("price")
-                policyId = policies.get("policyId")
-                ex.append(policyId)
-                adult_price = price.get("adult", {}).get("totalPrice", 0) if price.get("adult") else 0
-                adult_piaojia = price.get("adult", {}).get("salePrice", 0) if price.get("adult") else 0
-                adult_tax = price.get("adult", {}).get("tax", 0) if price.get("adult") else 0
-                child_price = price.get("child", {}).get("totalPrice", 0) if price.get("child") else 0
-                child_piaojia = price.get("child", {}).get("salePrice", 0) if price.get("child") else 0
-                child_tax = price.get("adult", {}).get("tax", 0) if price.get("child") else 0
-                infant_price = price.get("infant", {}).get("totalPrice", 0) if price.get("infant") else 0
-                infant_piaojia = price.get("child", {}).get("salePrice", 0) if price.get("infant") else 0
-                infant_tax = price.get("adult", {}).get("tax", 0) if price.get("infant") else 0
-                totalMoney = adult_price + child_price + infant_price
-                totalTax = price.get("totalTax", 0)
-                result_item = {
-                    "carrier": flight_info.get("airlineCode", ""),
-                    "fromsegs": segs,
-                    "ex": ("|").join(ex),
-                    "adult_price": adult_price,
-                    "adult_piaojia": adult_piaojia,
-                    "adult_tax": adult_tax,
-                    "child_price": child_price,
-                    "child_piaojia": child_piaojia,
-                    "child_tax": child_tax,
-                    "infant_price": infant_price,
-                    "infant_piaojia": infant_piaojia,
-                    "infant_tax": infant_tax,
-                    "totalMoney": totalMoney,
-                    "totalTax": totalTax,
-                    "currency": currency,
-                    "seatcount": policies.get("seatCount"),  # 座位数量
-                    "stopcity": None
-                }
-                results.append(result_item)
+
+            price = policies.get("price")
+            policyId = policies.get("policyId")
+            ex.append(policyId)
+            adult_price = price.get("adult", {}).get("totalPrice", 0) if price.get("adult") else 0
+            adult_piaojia = price.get("adult", {}).get("salePrice", 0) if price.get("adult") else 0
+            adult_tax = price.get("adult", {}).get("tax", 0) if price.get("adult") else 0
+            child_price = price.get("child", {}).get("totalPrice", 0) if price.get("child") else 0
+            child_piaojia = price.get("child", {}).get("salePrice", 0) if price.get("child") else 0
+            child_tax = price.get("adult", {}).get("tax", 0) if price.get("child") else 0
+            infant_price = price.get("infant", {}).get("totalPrice", 0) if price.get("infant") else 0
+            infant_piaojia = price.get("child", {}).get("salePrice", 0) if price.get("infant") else 0
+            infant_tax = price.get("adult", {}).get("tax", 0) if price.get("infant") else 0
+            totalMoney = adult_price + child_price + infant_price
+            totalTax = price.get("totalTax", 0)
+
+            first_seg = segs[0] if segs else {}
+            last_seg = segs[-1] if segs else {}
+            carrier = first_seg.get("oprcarrier", "") if first_seg else ""
+
+            result_item = {
+                "carrier": carrier,
+                "fromsegs": segs,
+                "ex": ("|").join(ex),
+                "adult_price": adult_price,
+                "adult_piaojia": adult_piaojia,
+                "adult_tax": adult_tax,
+                "child_price": child_price,
+                "child_piaojia": child_piaojia,
+                "child_tax": child_tax,
+                "infant_price": infant_price,
+                "infant_piaojia": infant_piaojia,
+                "infant_tax": infant_tax,
+                "totalMoney": totalMoney,
+                "totalTax": totalTax,
+                "currency": currency,
+                "seatcount": policies.get("seatCount"),
+                "stopcity": None
+            }
+            results.append(result_item)
         return results
 
     def updateToWhite(self, rid, token, sourceApi):
@@ -719,7 +744,7 @@ def search(param):
     pwd = 'Hjj07270318'
     dept, arr, fromdate, retdate = param.get('dept'), param.get('arr'), param.get('fromdate'), param.get('retdate', '')
     trip = CrawlerTrip(account=account, password=pwd)
-    query_result = trip.queryFlight(query_data)
+    query_result = trip.queryFlight(param)
     if query_result.get('code') != 200:
         return query_result
     flight_result = trip.parseFlight(query_result.get('data'))

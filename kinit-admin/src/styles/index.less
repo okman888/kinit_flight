@@ -7,7 +7,8 @@
 }
 
 // 解决表格多选框无法对齐问题
-.el-table__body-wrapper .el-table-column--selection>.cell, .el-table__header-wrapper .el-table-column--selection>.cell {
+.el-table__body-wrapper .el-table-column--selection > .cell,
+.el-table__header-wrapper .el-table-column--selection > .cell {
   display: inline !important;
 }
 
@@ -17,6 +18,6 @@
 }
 
 // 设置表单单选中行的背景颜色
-.el-table__body tr.current-row>td.el-table__cell {
+.el-table__body tr.current-row > td.el-table__cell {
   background-color: #ecf5ff !important;
 }

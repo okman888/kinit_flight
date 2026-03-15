@@ -135,13 +135,53 @@ export const asyncRouterMap: AppRouteRecordRaw[] = [
         }
       }
     ]
+  },
+  {
+    path: '/flight',
+    component: Layout,
+    name: 'Flight',
+    meta: {
+      title: '航班管理',
+      icon: 'tdesign:flight-takeoff',
+      alwaysShow: true
+    },
+    children: [
+      {
+        path: 'task',
+        component: () => import('@/views/Flight/Task/Task.vue'),
+        name: 'FlightTask',
+        meta: {
+          title: '采集任务',
+          noCache: true
+        }
+      },
+      {
+        path: 'task/detail',
+        component: () => import('@/views/Flight/Task/Detail.vue'),
+        name: 'FlightTaskDetail',
+        meta: {
+          title: '任务详情',
+          noCache: true,
+          hidden: true
+        }
+      },
+      {
+        path: 'result',
+        component: () => import('@/views/Flight/Result/Result.vue'),
+        name: 'FlightResult',
+        meta: {
+          title: '采集结果',
+          noCache: true
+        }
+      }
+    ]
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   strict: true,
-  routes: constantRouterMap as RouteRecordRaw[],
+  routes: [...constantRouterMap, ...asyncRouterMap] as RouteRecordRaw[],
   scrollBehavior: () => ({ left: 0, top: 0 })
 })
 

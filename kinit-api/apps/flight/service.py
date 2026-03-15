@@ -3,10 +3,12 @@
 
 import asyncio
 import json
+import random
 import re
 import uuid
 from datetime import datetime, timedelta
 
+from application.settings import FLIGHT_TASK_REQUEST_INTERVAL_MAX, FLIGHT_TASK_REQUEST_INTERVAL_MIN
 from core.database import session_factory
 from core.logger import logger
 from utils.excel.excel_manage import ExcelManage
@@ -86,12 +88,15 @@ def _request_key(departure_city: str, arrival_city: str, travel_date: datetime) 
 def _extract_retry_count(message: str) -> int:
     match = re.search(r"retry=(\d+)", message or "")
     if match:
-        # 第1次即不算重试，因此 retry=1 => retry_count=0
         return max(int(match.group(1)) - 1, 0)
     match = re.search(r"已重试(\d+)次", message or "")
     if match:
         return max(int(match.group(1)), 0)
     return 0
+
+
+def _random_interval() -> float:
+    return random.uniform(FLIGHT_TASK_REQUEST_INTERVAL_MIN, FLIGHT_TASK_REQUEST_INTERVAL_MAX)
 
 
 def _expand_task_requests(items: list[dict]) -> list[dict]:
@@ -319,7 +324,8 @@ async def run_flight_task(
             run_success_requests = 0
             run_failed_requests = 0
             errors = []
-            for request_item in current_requests:
+            request_count = len(current_requests)
+            for idx, request_item in enumerate(current_requests):
                 travel_date = request_item["travel_date"]
                 run_started = datetime.now()
                 query_payload = provider.build_query_payload(request_item, travel_date)
@@ -343,7 +349,8 @@ async def run_flight_task(
                             "status": "success" if ok else "failed",
                             "execute_ms": execute_ms,
                             "retry_count": _extract_retry_count(message),
-                            "message": message
+                            "message": message,
+                            "create_datetime": datetime.now()
                         }
                     )
 
@@ -354,13 +361,17 @@ async def run_flight_task(
                         f"{travel_date.strftime('%Y-%m-%d')} {message}"
                     )
                     await db.commit()
-                    continue
+                else:
+                    rows = _convert_rows(task_db_id, task_public_id, request_item, travel_date, channel, flights)
+                    if rows:
+                        await crud.FlightItineraryDal(db).create_datas(rows)
+                    run_success_requests += 1
+                    await db.commit()
 
-                rows = _convert_rows(task_db_id, task_public_id, request_item, travel_date, channel, flights)
-                if rows:
-                    await crud.FlightItineraryDal(db).create_datas(rows)
-                run_success_requests += 1
-                await db.commit()
+                if idx < request_count - 1:
+                    interval = _random_interval()
+                    logger.info(f"请求间隔等待 {interval:.2f} 秒")
+                    await asyncio.sleep(interval)
 
             await export_task_to_excel(task_id)
             if task_log_enabled:

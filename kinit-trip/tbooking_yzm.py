@@ -32,7 +32,14 @@ class CtripCaptchaSolver:
         self.log = log
         self.session = session
         # self.session = requests.Session()
-        self.ocr = ddddocr.DdddOcr(det=False, ocr=False, show_ad=False)
+        try:
+            # 使用最新版本 ddddocr API - SlideEngine
+            self.ocr = ddddocr.SlideEngine()
+        except Exception as e:
+            # 如果初始化失败，记录错误
+            self.log.error(f"Failed to initialize SlideEngine: {str(e)}")
+            # 设置为None，后续代码需要处理这种情况
+            self.ocr = None
         self.origin = "https://ic.trip.com"  # 非国内携程
         # self.ip = self.get_proxy()
         self.session.proxies = proxies
@@ -343,12 +350,13 @@ class CtripCaptchaSolver:
             cv2.imwrite(f'{abs_path}/img/bg_processed.png', bg_processed)
             cv2.imwrite(f'{abs_path}/img/slider_processed.png', slider_processed)
 
-            det = ddddocr.DdddOcr(det=False, ocr=False, show_ad=False)
+            # 使用 SlideEngine 进行滑块匹配
+            det = ddddocr.SlideEngine()
             with open(f"{abs_path}/img/bg_processed.png", 'rb') as f_bg, open(f"{abs_path}/img/slider_processed.png", 'rb') as f_slider:
                 bg_bytes = f_bg.read()
                 slider_bytes = f_slider.read()
-                # 使用 simple_target=True 避免解析错误
-                res = det.slide_match(slider_bytes, bg_bytes, simple_target=True)
+                # 使用 SlideEngine 的 match 方法
+                res = det.match(slider_bytes, bg_bytes)
                 gap_x = res['target'][0]
                 gap_y = 0  # 若需y坐标，需通过其他方式获取
             # 读取滑块图尺寸作为缺口大小
